@@ -76,6 +76,28 @@ def add_new_file():
     # Create the file
     with open(file_path, "w") as new_file:
         new_file.write("")  # Empty file
+    print(f"Created new file: {file_path}")
+
+    # Pull latest changes first to avoid conflicts
+    print(" Pulling latest changes from GitHub...")
+    subprocess.run(["git", "pull", "--rebase"], check=True)
+
+    # Commit and push
+    commit_message = input(f"Enter commit message for '{filename}': ")
+    subprocess.run(["git", "add", filename], check=True)
+    subprocess.run(["git", "commit", "-m", commit_message], check=True)
+    subprocess.run(["git", "push", "origin", "main"], check=True)
+    print("\n New file successfully pushed to GitHub!")
+
+    """Manually add a new file to the repo."""
+    os.chdir(REPO_PATH)
+
+    filename = input("\n🔹 Enter the name of the new file you want to add: ")
+    file_path = os.path.join(REPO_PATH, filename)
+
+    # Create the file
+    with open(file_path, "w") as new_file:
+        new_file.write("")  # Empty file
     print(f" Created new file: {file_path}")
 
     # Commit and push
