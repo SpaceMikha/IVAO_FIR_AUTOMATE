@@ -12,7 +12,7 @@ REPO_PATH = os.getenv("REPO_PATH")
 
 if not SECTORFILE_PATH or not REPO_PATH:
     print(" Error: SECTORFILE_PATH or REPO_PATH is missing in the .env file.")
-    print(" Make sure the .env file contains:")
+    print("  Ensure the .env file contains:")
     print("   SECTORFILE_PATH=/path/to/sectorfiles")
     print("   REPO_PATH=/path/to/repo")
     exit(1)
@@ -48,7 +48,7 @@ def manual_commit():
     os.chdir(REPO_PATH)
     modified_files = []
 
-    print("\n🔹 Enter the filenames you modified (one per line). Type 'done' when finished:")
+    print("\n Enter the filenames you modified (one per line). Type 'done' when finished:")
 
     while True:
         filename = input("> ").strip()
@@ -63,12 +63,13 @@ def manual_commit():
         print(" No valid files entered. Exiting...")
         return
 
-    # Stage files one by one with commit messages
+    # Stage and commit files individually
     for file in modified_files:
         commit_message = input(f" Enter commit message for '{file}': ").strip()
         try:
             subprocess.run(["git", "add", file], check=True)
             subprocess.run(["git", "commit", "-m", commit_message], check=True)
+            print(f" Committed '{file}' with message: {commit_message}")
         except subprocess.CalledProcessError:
             print(f" Error: Failed to commit '{file}'. Skipping...")
             continue
@@ -81,7 +82,7 @@ def manual_commit():
         print(" Error: Failed to push changes to GitHub. Please check your internet connection.")
 
 def add_new_file():
-    """Manually add one or multiple new files to the repo."""
+    """Manually add one or multiple new files to the repo, with individual commit messages."""
     os.chdir(REPO_PATH)
     
     files_to_add = []
@@ -111,17 +112,16 @@ def add_new_file():
     except subprocess.CalledProcessError:
         print(" Warning: Failed to pull latest changes. Proceeding with commit...")
 
-    # Commit and push
-    commit_message = input("\n Enter commit message for these new files: ").strip()
-
-    try:
-        for filename in files_to_add:
+    # Commit and push each file individually
+    for filename in files_to_add:
+        commit_message = input(f"\n Enter commit message for '{filename}': ").strip()
+        try:
             subprocess.run(["git", "add", filename], check=True)
-        subprocess.run(["git", "commit", "-m", commit_message], check=True)
-        subprocess.run(["git", "push", "origin", "main"], check=True)
-        print("\n New files successfully pushed to GitHub!")
-    except subprocess.CalledProcessError:
-        print(" Error: Failed to push changes. Check your Git configuration.")
+            subprocess.run(["git", "commit", "-m", commit_message], check=True)
+            subprocess.run(["git", "push", "origin", "main"], check=True)
+            print(f" '{filename}' successfully pushed to GitHub!")
+        except subprocess.CalledProcessError:
+            print(f" Error: Failed to push '{filename}'. Skipping...")
 
 def check_git_status():
     """Check if there are any unstaged changes before proceeding."""
@@ -137,8 +137,8 @@ def check_git_status():
 
 if __name__ == "__main__":
     print("\n Choose an option:")
-    print("Press 1 to: Commit & push modified files")
-    print(" Press 2 to: Add new file(s) and push to the repo")
+    print("1 Commit & push modified files")
+    print("2 Add new file(s) and push to the repo")
 
     choice = input("\nEnter 1 or 2: ").strip()
 
