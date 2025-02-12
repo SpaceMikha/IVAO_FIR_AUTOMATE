@@ -11,7 +11,10 @@ SECTORFILE_PATH = os.getenv("SECTORFILE_PATH")
 REPO_PATH = os.getenv("REPO_PATH")
 
 if not SECTORFILE_PATH or not REPO_PATH:
-    print("Error: SECTORFILE_PATH or REPO_PATH is not set in .env file.")
+    print(" Error: SECTORFILE_PATH or REPO_PATH is missing in the .env file.")
+    print(" Make sure the .env file contains:")
+    print("   SECTORFILE_PATH=/path/to/sectorfiles")
+    print("   REPO_PATH=/path/to/repo")
     exit(1)
 
 def find_file(filename):
@@ -27,7 +30,12 @@ def copy_file_to_repo(filename):
 
     if sectorfile_path:
         repo_file_path = os.path.join(REPO_PATH, filename)
-        os.makedirs(os.path.dirname(repo_file_path), exist_ok=True)  # Ensure directory exists
+
+        # Ensure the target directory exists
+        target_dir = os.path.dirname(repo_file_path)
+        if target_dir:
+            os.makedirs(target_dir, exist_ok=True)
+
         shutil.copy2(sectorfile_path, repo_file_path)  # Copy file to repo
         print(f" Copied: {sectorfile_path} → {repo_file_path}")
         return repo_file_path
@@ -40,83 +48,106 @@ def manual_commit():
     os.chdir(REPO_PATH)
     modified_files = []
 
-    print("\n **Enter the filenames you modified (one per line). Type 'done' when finished:**")
+    print("\n🔹 Enter the filenames you modified (one per line). Type 'done' when finished:")
 
     while True:
-        filename = input("> ")
+        filename = input("> ").strip()
         if filename.lower() == "done":
             break
-        
-        repo_file_path = copy_file_to_repo(filename)
 
+        repo_file_path = copy_file_to_repo(filename)
         if repo_file_path:
             modified_files.append(filename)
 
     if not modified_files:
-        print("No valid files entered. Exiting...")
+        print(" No valid files entered. Exiting...")
         return
 
     # Stage files one by one with commit messages
     for file in modified_files:
-        commit_message = input(f" Enter commit message for '{file}': ")
-        subprocess.run(["git", "add", file], check=True)
-        subprocess.run(["git", "commit", "-m", commit_message], check=True)
+        commit_message = input(f" Enter commit message for '{file}': ").strip()
+        try:
+            subprocess.run(["git", "add", file], check=True)
+            subprocess.run(["git", "commit", "-m", commit_message], check=True)
+        except subprocess.CalledProcessError:
+            print(f" Error: Failed to commit '{file}'. Skipping...")
+            continue
 
     # Push all committed changes
-    subprocess.run(["git", "push", "origin", "main"], check=True)
-    print("\n Changes successfully pushed to GitHub!")
+    try:
+        subprocess.run(["git", "push", "origin", "main"], check=True)
+        print("\n Changes successfully pushed to GitHub!")
+    except subprocess.CalledProcessError:
+        print(" Error: Failed to push changes to GitHub. Please check your internet connection.")
 
 def add_new_file():
-    """Manually add a new file to the repo."""
+    """Manually add one or multiple new files to the repo."""
     os.chdir(REPO_PATH)
+    
+    files_to_add = []
+    print("\n Enter the filenames you want to add (one per line). Type 'done' when finished:")
 
-    filename = input("\n🔹 Enter the name of the new file you want to add: ")
-    file_path = os.path.join(REPO_PATH, filename)
+    while True:
+        filename = input("> ").strip()
+        if filename.lower() == "done":
+            break
+        file_path = os.path.join(REPO_PATH, filename)
 
-    # Create the file
-    with open(file_path, "w") as new_file:
-        new_file.write("")  # Empty file
-    print(f"Created new file: {file_path}")
+        # Create the file
+        with open(file_path, "w") as new_file:
+            new_file.write("")  # Empty file
+        print(f" Created new file: {file_path}")
+
+        files_to_add.append(filename)
+
+    if not files_to_add:
+        print(" No files entered. Exiting...")
+        return
 
     # Pull latest changes first to avoid conflicts
-    print(" Pulling latest changes from GitHub...")
-    subprocess.run(["git", "pull", "--rebase"], check=True)
+    try:
+        print(" Pulling latest changes from GitHub...")
+        subprocess.run(["git", "pull", "--rebase"], check=True)
+    except subprocess.CalledProcessError:
+        print(" Warning: Failed to pull latest changes. Proceeding with commit...")
 
     # Commit and push
-    commit_message = input(f"Enter commit message for '{filename}': ")
-    subprocess.run(["git", "add", filename], check=True)
-    subprocess.run(["git", "commit", "-m", commit_message], check=True)
-    subprocess.run(["git", "push", "origin", "main"], check=True)
-    print("\n New file successfully pushed to GitHub!")
+    commit_message = input("\n Enter commit message for these new files: ").strip()
 
-    """Manually add a new file to the repo."""
-    os.chdir(REPO_PATH)
+    try:
+        for filename in files_to_add:
+            subprocess.run(["git", "add", filename], check=True)
+        subprocess.run(["git", "commit", "-m", commit_message], check=True)
+        subprocess.run(["git", "push", "origin", "main"], check=True)
+        print("\n New files successfully pushed to GitHub!")
+    except subprocess.CalledProcessError:
+        print(" Error: Failed to push changes. Check your Git configuration.")
 
-    filename = input("\n Enter the name of the new file you want to add: ")
-    file_path = os.path.join(REPO_PATH, filename)
-
-    # Create the file
-    with open(file_path, "w") as new_file:
-        new_file.write("")  # Empty file
-    print(f" Created new file: {file_path}")
-
-    # Commit and push
-    commit_message = input(f" Enter commit message for '{filename}': ")
-    subprocess.run(["git", "add", filename], check=True)
-    subprocess.run(["git", "commit", "-m", commit_message], check=True)
-    subprocess.run(["git", "push", "origin", "main"], check=True)
-    print("\nNew file successfully pushed to GitHub!")
+def check_git_status():
+    """Check if there are any unstaged changes before proceeding."""
+    try:
+        status_output = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True)
+        if not status_output.stdout.strip():
+            print(" Git working directory is clean. No changes detected.")
+            return False
+        return True
+    except subprocess.CalledProcessError:
+        print(" Error: Unable to check Git status. Make sure Git is installed and configured.")
+        return False
 
 if __name__ == "__main__":
-    print("\nChoose an option:")
-    print("1 Commit & push modified files")
-    print("2 Add a new file and push it to the repo")
+    print("\n Choose an option:")
+    print("Press 1 to: Commit & push modified files")
+    print(" Press 2 to: Add new file(s) and push to the repo")
 
-    choice = input("\nEnter 1 or 2: ")
+    choice = input("\nEnter 1 or 2: ").strip()
 
     if choice == "1":
-        manual_commit()
+        if check_git_status():
+            manual_commit()
+        else:
+            print(" No modified files detected. Exiting...")
     elif choice == "2":
         add_new_file()
     else:
-        print(" Invalid choice. Exiting...")
+        print("❌ Invalid choice. Exiting...")
