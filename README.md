@@ -35,7 +35,7 @@ python --version
 ### **2️ Install Required Packages**
 Run:
 ```sh
-pip install python-dotenv colorama
+pip install python-dotenv colorama inquirer
 ```
 
 ### **3️ Clone the Repository**
