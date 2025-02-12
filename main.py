@@ -40,7 +40,7 @@ def manual_commit():
     os.chdir(REPO_PATH)
     modified_files = []
 
-    print("\n🔹 **Enter the filenames you modified (one per line). Type 'done' when finished:**")
+    print("\n **Enter the filenames you modified (one per line). Type 'done' when finished:**")
 
     while True:
         filename = input("> ")
@@ -92,7 +92,7 @@ def add_new_file():
     """Manually add a new file to the repo."""
     os.chdir(REPO_PATH)
 
-    filename = input("\n🔹 Enter the name of the new file you want to add: ")
+    filename = input("\n Enter the name of the new file you want to add: ")
     file_path = os.path.join(REPO_PATH, filename)
 
     # Create the file
