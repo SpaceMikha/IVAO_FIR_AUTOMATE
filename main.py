@@ -1,6 +1,8 @@
 import os
 import shutil
 import subprocess
+import datetime
+import inquirer
 from dotenv import load_dotenv
 from colorama import Fore, Style, init
 
@@ -16,17 +18,19 @@ REPO_PATH = os.getenv("REPO_PATH")
 
 if not SECTORFILE_PATH or not REPO_PATH:
     print(Fore.RED + "Error: SECTORFILE_PATH or REPO_PATH is missing in the .env file.")
-    print("Ensure the .env file contains:")
-    print("  SECTORFILE_PATH=/path/to/sectorfiles")
-    print("  REPO_PATH=/path/to/repo")
     exit(1)
+
+def log_message(message, color=Fore.WHITE):
+    """Prints a log message with a timestamp."""
+    timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    print(color + timestamp + " " + message)
 
 def find_file(filename):
     """Search for the file inside SECTORFILE_PATH recursively."""
     for root, _, files in os.walk(SECTORFILE_PATH):
         if filename in files:
             return os.path.join(root, filename)
-    return None  # File not found
+    return None
 
 def copy_file_to_repo(filename):
     """Find and copy a file from SECTORFILE_PATH to REPO_PATH."""
@@ -40,112 +44,123 @@ def copy_file_to_repo(filename):
             os.makedirs(target_dir, exist_ok=True)
 
         shutil.copy2(sectorfile_path, repo_file_path)
-        print(Fore.GREEN + f"Copied: {sectorfile_path} → {repo_file_path}")
+        log_message(f"Copied: {sectorfile_path} → {repo_file_path}", Fore.GREEN)
         return repo_file_path
     else:
-        print(Fore.YELLOW + f"Warning: '{filename}' not found in {SECTORFILE_PATH}.")
+        log_message(f"Warning: '{filename}' not found in {SECTORFILE_PATH}.", Fore.YELLOW)
         return None
 
-def manual_commit():
-    """Manually select files, search, copy, add commit messages, and push changes."""
+def detect_modified_files():
+    """Automatically detects modified files in the repository."""
     os.chdir(REPO_PATH)
+    result = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+    
     modified_files = []
+    for line in result.stdout.strip().split("\n"):
+        if line:
+            status, filename = line[:2], line[3:].strip()
+            if status in ["M ", "A ", "??"]:  # Modified, Added, Untracked files
+                modified_files.append(filename)
 
-    print(Fore.CYAN + "\nEnter the filenames you modified (one per line). Type 'done' when finished:")
+    return modified_files
 
-    while True:
-        filename = input(Fore.BLUE + "> ").strip()
-        if filename.lower() == "done":
-            break
-
-        repo_file_path = copy_file_to_repo(filename)
-        if repo_file_path:
-            modified_files.append(filename)
+def manual_commit():
+    """Commits and pushes modified files automatically."""
+    os.chdir(REPO_PATH)
+    modified_files = detect_modified_files()
 
     if not modified_files:
-        print(Fore.RED + "No valid files entered. Exiting...")
+        log_message("No modified files detected. Exiting...", Fore.YELLOW)
         return
 
     for file in modified_files:
-        commit_message = input(Fore.MAGENTA + f"Enter commit message for '{file}': ").strip()
+        commit_message = inquirer.text(message=f"Enter commit message for '{file}'")
         try:
             subprocess.run(["git", "add", file], check=True)
             subprocess.run(["git", "commit", "-m", commit_message], check=True)
-            print(Fore.GREEN + f"Committed '{file}' with message: {commit_message}")
+            log_message(f"Committed '{file}' with message: {commit_message}", Fore.GREEN)
         except subprocess.CalledProcessError:
-            print(Fore.RED + f"Error: Failed to commit '{file}'. Skipping...")
+            log_message(f"Error: Failed to commit '{file}'. Skipping...", Fore.RED)
             continue
 
-    try:
-        subprocess.run(["git", "push", "origin", "main"], check=True)
-        print(Fore.GREEN + "Changes successfully pushed to GitHub!")
-    except subprocess.CalledProcessError:
-        print(Fore.RED + "Error: Failed to push changes to GitHub. Please check your internet connection.")
+    push_to_github()
 
 def add_new_file():
-    """Manually add one or multiple new files to the repo, with individual commit messages."""
+    """Allows the user to create new files and push them to GitHub."""
     os.chdir(REPO_PATH)
     
     files_to_add = []
-    print(Fore.CYAN + "\nEnter the filenames you want to add (one per line). Type 'done' when finished:")
-
     while True:
-        filename = input(Fore.BLUE + "> ").strip()
+        filename = inquirer.text(message="Enter the name of the new file (or type 'done' to finish)")
         if filename.lower() == "done":
             break
         file_path = os.path.join(REPO_PATH, filename)
 
         with open(file_path, "w") as new_file:
             new_file.write("")
-        print(Fore.GREEN + f"Created new file: {file_path}")
+        log_message(f"Created new file: {file_path}", Fore.GREEN)
 
         files_to_add.append(filename)
 
     if not files_to_add:
-        print(Fore.RED + "No files entered. Exiting...")
+        log_message("No files entered. Exiting...", Fore.RED)
         return
 
     try:
-        print(Fore.YELLOW + "Pulling latest changes from GitHub...")
+        log_message("Pulling latest changes from GitHub...", Fore.YELLOW)
         subprocess.run(["git", "pull", "--rebase"], check=True)
     except subprocess.CalledProcessError:
-        print(Fore.YELLOW + "Warning: Failed to pull latest changes. Proceeding with commit...")
+        log_message("Warning: Failed to pull latest changes. Proceeding with commit...", Fore.YELLOW)
 
     for filename in files_to_add:
-        commit_message = input(Fore.MAGENTA + f"Enter commit message for '{filename}': ").strip()
+        commit_message = inquirer.text(message=f"Enter commit message for '{filename}'")
         try:
             subprocess.run(["git", "add", filename], check=True)
             subprocess.run(["git", "commit", "-m", commit_message], check=True)
-            subprocess.run(["git", "push", "origin", "main"], check=True)
-            print(Fore.GREEN + f"'{filename}' successfully pushed to GitHub!")
+            log_message(f"Committed and pushed '{filename}'", Fore.GREEN)
         except subprocess.CalledProcessError:
-            print(Fore.RED + f"Error: Failed to push '{filename}'. Skipping...")
+            log_message(f"Error: Failed to push '{filename}'. Skipping...", Fore.RED)
 
-def check_git_status():
-    """Check if there are any unstaged changes before proceeding."""
+    push_to_github()
+
+def get_current_git_branch():
+    """Gets the current active Git branch."""
+    os.chdir(REPO_PATH)
+    result = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True)
+    return result.stdout.strip()
+
+def push_to_github():
+    """Pushes committed changes to GitHub with error handling."""
+    branch = get_current_git_branch()
     try:
-        status_output = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True)
-        if not status_output.stdout.strip():
-            print(Fore.GREEN + "Git working directory is clean. No changes detected.")
-            return False
-        return True
+        subprocess.run(["git", "push", "origin", branch], check=True)
+        log_message(f"Changes successfully pushed to GitHub on branch '{branch}'", Fore.GREEN)
     except subprocess.CalledProcessError:
-        print(Fore.RED + "Error: Unable to check Git status. Make sure Git is installed and configured.")
-        return False
+        log_message("Error: Failed to push changes to GitHub. Please check your authentication.", Fore.RED)
 
-if __name__ == "__main__":
-    print(Fore.CYAN + "\nChoose an option:")
-    print(Fore.YELLOW + "1 Commit & push modified files")
-    print(Fore.YELLOW + "2 Add new file(s) and push to the repo")
-
-    choice = input(Fore.BLUE + "\nEnter 1 or 2: ").strip()
-
-    if choice == "1":
-        if check_git_status():
-            manual_commit()
-        else:
-            print(Fore.YELLOW + "No modified files detected. Exiting...")
-    elif choice == "2":
+def main_menu():
+    """Interactive menu for user selection."""
+    questions = [
+        inquirer.List(
+            "action",
+            message="Choose an action",
+            choices=[
+                "Commit & push modified files automatically",
+                "Add new file(s) and push to the repo",
+                "Exit"
+            ],
+        )
+    ]
+    
+    answer = inquirer.prompt(questions)["action"]
+    
+    if answer == "Commit & push modified files automatically":
+        manual_commit()
+    elif answer == "Add new file(s) and push to the repo":
         add_new_file()
     else:
-        print(Fore.RED + "Invalid choice. Exiting...")
+        log_message("Exiting...", Fore.YELLOW)
+        exit(0)
+
+if __name__ == "__main__":
+    main_menu()
