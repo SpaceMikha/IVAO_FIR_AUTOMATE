@@ -65,6 +65,47 @@ def detect_modified_files():
     return modified_files
 
 def manual_commit():
+    """Manually select a file by entering its name, then copy, commit, and push it."""
+    os.chdir(REPO_PATH)
+
+    while True:
+        filename = inquirer.text(message="Enter the filename to commit (or type 'done' to finish)")
+        
+        if filename.lower() == "done":
+            log_message("Exiting manual commit...", Fore.YELLOW)
+            return
+
+        # Find the file inside SECTORFILE_PATH
+        sectorfile_path = find_file(filename)
+
+        if not sectorfile_path:
+            log_message(f"Error: File '{filename}' not found in {SECTORFILE_PATH}. Try again.", Fore.RED)
+            continue
+
+        # Copy file to repo
+        repo_file_path = os.path.join(REPO_PATH, filename)
+        os.makedirs(os.path.dirname(repo_file_path), exist_ok=True)
+        shutil.copy2(sectorfile_path, repo_file_path)
+        log_message(f"Copied: {sectorfile_path} → {repo_file_path}", Fore.GREEN)
+
+        # Ask for commit message
+        commit_message = inquirer.text(message=f"Enter commit message for '{filename}'")
+
+        try:
+            subprocess.run(["git", "add", filename], check=True)
+            subprocess.run(["git", "commit", "-m", commit_message], check=True)
+            log_message(f"Committed '{filename}' with message: {commit_message}", Fore.GREEN)
+        except subprocess.CalledProcessError:
+            log_message(f"Error: Failed to commit '{filename}'. Skipping...", Fore.RED)
+            continue
+
+        # Ask if the user wants to commit another file
+        another = inquirer.confirm(message="Do you want to commit another file?", default=True)
+        if not another:
+            break
+
+    push_to_github()
+
     """Commits and pushes modified files automatically."""
     os.chdir(REPO_PATH)
     modified_files = detect_modified_files()
